@@ -1,53 +1,54 @@
 import streamlit as st
 import pandas as pd
+import re
 
+st.set_page_config(page_title="USA Store Search App", layout="wide")
+st.title("🏬 USA Store Search App")
 
-st.set_page_config(page_title="Store Finder", layout="wide")
-
-st.title("🛍️ USA Retail Store Finder (Discount, Department, Convenience)")
-
-uploaded_file = st.file_uploader("Upload your store list (.xlsx)", type=["xlsx"])
+# Upload user file
+uploaded_file = st.file_uploader("Upload your store list (Excel or CSV)", type=["xlsx", "csv"])
 
 if uploaded_file:
-    try:
-        df = pd.read_excel(uploaded_file, sheet_name=0)
+    # Read the uploaded file
+    if uploaded_file.name.endswith(".xlsx"):
+        df = pd.read_excel(uploaded_file)
+    else:
+        df = pd.read_csv(uploaded_file)
 
-        # Clean and extract ZIP & State (basic guess from address)
-        df["ZIP Code"] = df["Street Address-1"].str.extract(r'(\b\d{5}\b)', expand=False)
-        df["State"] = df["Street Address-1"].str.extract(r'\b([A-Z]{2})\b', expand=False)
+    # Clean column names
+    df.columns = df.columns.str.strip()
 
-        # Work status from Active/Inactive
-        df["Work Status"] = df["Active/ Inactive"].apply(lambda x: "Yes" if str(x).strip().lower() == "active" else "No")
+    # Try extracting ZIP and State from address if not directly available
+    if 'ZIP' not in df.columns or 'State' not in df.columns:
+        def extract_zip(address):
+            match = re.search(r'\b(\d{5})(?:[-\s]\d{4})?\b', str(address))
+            return match.group(1) if match else None
 
-        # Sidebar filters
-        st.sidebar.header("🔍 Filter Stores")
-        zip_filter = st.sidebar.text_input("Search by ZIP Code")
-        state_filter = st.sidebar.text_input("Search by State (e.g., NY, TX)")
-        name_filter = st.sidebar.text_input("Search by Store Name")
+        df['ZIP'] = df['Street Address-1'].apply(extract_zip)
 
-        # Apply filters
-        filtered_df = df.copy()
-        if zip_filter:
-            filtered_df = filtered_df[filtered_df["ZIP Code"] == zip_filter.strip()]
-        if state_filter:
-            filtered_df = filtered_df[filtered_df["State"] == state_filter.strip().upper()]
-        if name_filter:
-            filtered_df = filtered_df[filtered_df["Account Name / Customer Name"].str.contains(name_filter, case=False, na=False)]
+        # Optional: add State extraction logic if needed
 
-        st.subheader(f"📍 Results ({len(filtered_df)} stores found)")
-        col1, col2 = st.columns(2)
+    # Sidebar filters
+    st.sidebar.header("🔍 Search Filters")
+    zip_filter = st.sidebar.text_input("Enter ZIP Code")
+    state_filter = st.sidebar.text_input("Enter State Abbreviation (e.g., NY, TX)")
+    name_filter = st.sidebar.text_input("Search by Store Name")
 
-        with col1:
-            st.markdown("### ✅ Stores You Work With")
-            worked_df = filtered_df[filtered_df["Work Status"] == "Yes"]
-            st.dataframe(worked_df[["Account Name / Customer Name", "Street Address-1", "ZIP Code", "State"]])
+    # Apply filters
+    filtered_df = df.copy()
+    if zip_filter:
+        filtered_df = filtered_df[filtered_df['ZIP'].astype(str).str.contains(zip_filter)]
+    if state_filter:
+        filtered_df = filtered_df[df.columns[df.columns.str.contains('State', case=False)][0]].str.upper().str.contains(state_filter.upper(), na=False)
+    if name_filter:
+        filtered_df = filtered_df[df.columns[df.columns.str.contains('Account Name', case=False)][0]].str.contains(name_filter, case=False, na=False)
 
-        with col2:
-            st.markdown("### ❌ Stores You Don't Work With")
-            not_worked_df = filtered_df[filtered_df["Work Status"] == "No"]
-            st.dataframe(not_worked_df[["Account Name / Customer Name", "Street Address-1", "ZIP Code", "State"]])
+    st.subheader("✅ Stores You Work With")
+    st.dataframe(filtered_df)
 
-    except Exception as e:
-        st.error(f"Error processing file: {e}")
+    # Placeholder: Display external stores (to be fetched from web sources in future)
+    st.subheader("🌐 Other Stores (Fetched from Web Sources - Coming Soon)")
+    st.info("This section will show stores not in your list, pulled from external sources like Google Maps or Yelp.")
+
 else:
-    st.info("📤 Upload your store list to get started.")
+    st.warning("Please upload your store list to begin.")
