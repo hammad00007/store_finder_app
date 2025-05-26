@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-pip install openpyxl
-
 
 
 st.set_page_config(page_title="Store Finder", layout="wide")
