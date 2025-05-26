@@ -15,18 +15,17 @@ if uploaded_file:
     else:
         df = pd.read_csv(uploaded_file)
 
-    # Clean column names
-    df.columns = df.columns.str.strip()
+    # Clean and normalize column names
+    df.columns = df.columns.str.strip().str.replace(r"[^\w]+", "_", regex=True)
 
     # Try extracting ZIP and State from address if not directly available
-    if 'ZIP' not in df.columns or 'State' not in df.columns:
+    if 'ZIP' not in df.columns:
         def extract_zip(address):
             match = re.search(r'\b(\d{5})(?:[-\s]\d{4})?\b', str(address))
             return match.group(1) if match else None
-
-        df['ZIP'] = df['Street Address-1'].apply(extract_zip)
-
-        # Optional: add State extraction logic if needed
+        address_col = [col for col in df.columns if 'address' in col.lower()]
+        if address_col:
+            df['ZIP'] = df[address_col[0]].apply(extract_zip)
 
     # Sidebar filters
     st.sidebar.header("🔍 Search Filters")
@@ -39,9 +38,13 @@ if uploaded_file:
     if zip_filter:
         filtered_df = filtered_df[filtered_df['ZIP'].astype(str).str.contains(zip_filter)]
     if state_filter:
-        filtered_df = filtered_df[df.columns[df.columns.str.contains('State', case=False)][0]].str.upper().str.contains(state_filter.upper(), na=False)
+        state_col = [col for col in df.columns if 'state' in col.lower()]
+        if state_col:
+            filtered_df = filtered_df[filtered_df[state_col[0]].str.upper().str.contains(state_filter.upper(), na=False)]
     if name_filter:
-        filtered_df = filtered_df[df.columns[df.columns.str.contains('Account Name', case=False)][0]].str.contains(name_filter, case=False, na=False)
+        name_col = [col for col in df.columns if 'account_name' in col.lower()]
+        if name_col:
+            filtered_df = filtered_df[filtered_df[name_col[0]].str.contains(name_filter, case=False, na=False)]
 
     st.subheader("✅ Stores You Work With")
     st.dataframe(filtered_df)
